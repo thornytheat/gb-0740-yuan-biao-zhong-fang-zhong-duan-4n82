@@ -44,6 +44,8 @@ def create_app(options=None):
         result = record(key) if key else execute(repository(), fixture("nightly"))[0]
         state = request.args.get("state")
         rows = [task for task in result["排程"] if not state or task["状态"] == state]
+        is_continuation = "续批" in result
+        default_sample = "dawn" if section == "continuation" else "nightly"
         return render_template(
             f"{section}.html",
             views=VIEWS,
@@ -51,12 +53,14 @@ def create_app(options=None):
             inputs=SAMPLES,
             data=result,
             meta=result["批次"],
-            sample=request.args.get("sample", "nightly"),
+            sample=request.args.get("sample", default_sample),
             reused=request.args.get("reused") == "yes",
             summary=result["分区勾稽"],
             stage_columns=VIEWS[section][1],
             tasks=rows,
             filter_state=state,
+            is_continuation=is_continuation,
+            parent_key=result["续批"]["原批编号"] if is_continuation else key,
             latest=repository().latest() if section == "release" else [],
         )
 

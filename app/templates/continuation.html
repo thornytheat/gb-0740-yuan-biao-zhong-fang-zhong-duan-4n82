@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block section %}
+{% if is_continuation %}
+{% set cont = data['续批'] %}
+<section class="panel stream"><h2>$ continuation handoff <small>原批 {{ cont['原批编号'] }}</small></h2>
+  <div class="filters" aria-label="续批交接说明">
+    <span>可继续使用 {{ cont['可继续使用']|length }} 个分区</span>
+    <span>需要重做 {{ cont['需要重做']|length }} 个分区</span>
+    <span>证据不足 {{ cont['证据不足']|length }} 个分区</span>
+  </div>
+  <div class="scroll" tabindex="0" aria-label="续批处置分区">
+    {% for state, label, hint in [('reuse','= 可继续使用','沿用当前快照，不中断下游补数'),('write','+ 需要重做','依赖新口径，按目标指针重放'),('blocked','! 证据不足','证据不足，不能进入续批')] %}
+    {% set bucket = cont[{'reuse':'可继续使用','write':'需要重做','blocked':'证据不足'}[state]] %}
+    <details {% if loop.first %}open{% endif %}>
+      <summary><span class="state" data-state="{{ state }}">{{ label }}</span><span>{{ hint }}</span><span class="count">{{ bucket|length }} 个</span></summary>
+      <ul class="upstream">{% for key in bucket %}<li>{{ key }}</li>{% else %}<li class="empty">本档无分区。</li>{% endfor %}</ul>
+    </details>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel output"><h2>处置明细 <small>{{ tasks|length }} 个受影响分区</small></h2>
+  <div class="scroll" tabindex="0" aria-label="处置明细"><table>
+    <thead><tr><th scope="col">分区</th><th scope="col">处置</th><th scope="col">原因码</th><th scope="col">当前指针</th><th scope="col">目标指针</th><th scope="col">目标行数</th></tr></thead>
+    <tbody>{% for task in tasks %}<tr>
+      <td>{{ task['分区'] }}</td>
+      <td><span class="state" data-state="{{ task['状态'] }}">{{ {'write':'需要重做','reuse':'可继续使用','blocked':'证据不足'}[task['状态']] }}</span></td>
+      <td>{{ task['原因码'] or '—' }}</td>
+      <td><code>{{ task['当前']['version'] if task['当前'] else '—' }}</code></td>
+      <td><code>{{ task['计划']['version'] if task['计划'] else '—' }}</code></td>
+      <td class="num">{{ task['计划']['rows'] if task['计划'] else '—' }}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel output"><h2>隔离留证（未处理冲突与无效行，不进续批） <small>{{ cont['隔离留证']|length }} 项</small></h2>
+  {% if cont['隔离留证'] %}<div class="scroll" tabindex="0" aria-label="隔离留证"><table>
+    <thead><tr><th scope="col">源行</th><th scope="col">分区</th><th scope="col">原因码</th></tr></thead>
+    <tbody>{% for row in cont['隔离留证'] %}<tr><td class="num">{{ row['源行'] }}</td><td>{{ row.get('分区', '—') }}</td><td>{{ row['原因码'] }}</td></tr>{% endfor %}</tbody>
+  </table></div>{% else %}<p class="empty">当前修订没有隔离行。</p>{% endif %}
+</section>
+
+<section class="panel output"><h2>重复留证（同条修订重传，不重复进入续批） <small>{{ cont['重复留证']|length }} 项</small></h2>
+  {% if cont['重复留证'] %}<div class="scroll" tabindex="0" aria-label="重复留证"><table>
+    <thead><tr><th scope="col">源行</th><th scope="col">分区</th><th scope="col">原因码</th></tr></thead>
+    <tbody>{% for row in cont['重复留证'] %}<tr><td class="num">{{ row['源行'] }}</td><td>{{ row['分区'] }}</td><td>{{ row['原因码'] }}</td></tr>{% endfor %}</tbody>
+  </table></div>{% else %}<p class="empty">当前修订没有重复行。</p>{% endif %}
+</section>
+
+<section class="panel checksum"><h2>$ continuation rollback evidence</h2>
+  <dl>
+    <div><dt>演练前摘要（原批快照）</dt><dd>{{ data['回滚']['演练前摘要'] }}</dd></div>
+    <div><dt>演练后摘要</dt><dd>{{ data['回滚']['演练后摘要'] }}</dd></div>
+    <div><dt>回滚摘要</dt><dd>{{ data['回滚']['回滚摘要'] }}</dd></div>
+  </dl>
+</section>
+<section class="panel trailer"><h2>交接判定</h2>
+  <div>恢复一致 <strong>{{ '是' if data['回滚']['恢复一致'] else '否' }}</strong></div>
+  <div>演练写入 <strong>{{ data['回滚']['演练写入'] }}</strong></div>
+  <div>模拟行数 <strong>{{ summary['模拟行数'] }}</strong></div>
+  <div>行数变化 <strong>{{ summary['行数变化'] }}</strong></div>
+  <div>行数差 <strong>{{ summary['行数差'] }}</strong></div>
+  <div>影响外变动 <strong>{{ data['回滚']['影响外变动']|length }}</strong></div>
+</section>
+<section class="panel trailer"><h2>链路凭据</h2>
+  <div>原批编号 <strong>{{ cont['原批编号'] }}</strong></div>
+  <div>原批文件摘要 <code>{{ cont['原批文件摘要'] }}</code></div>
+  <div>修订文件摘要 <code>{{ cont['修订文件摘要'] }}</code></div>
+</section>
+{% else %}
+<section class="panel output"><h2>$ continuation entry</h2>
+  <p class="empty">当前是原批 <code>{{ meta['编号'] }}</code>。在上方选择「凌晨迟到修订」或上传修订快照后点击「续开一批」，系统将只读保留原批并生成续批。</p>
+</section>
+{% endif %}
+{% endblock %}

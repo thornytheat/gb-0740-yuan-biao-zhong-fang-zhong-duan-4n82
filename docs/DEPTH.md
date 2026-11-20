@@ -14,6 +14,7 @@
 | M5 回滚校验 | 核对写入前后与恢复哈希 | `GET /api/rollback/{id}` | `app/modules/m5_rollback/service.py` | `tests/test_rollback.py` |
 | M6 行数勾稽 | 守恒比较影响分区、源记录和行数 | `GET /api/reconcile/{id}` | `app/modules/m6_reconcile/service.py` | `tests/test_reconcile.py` |
 | M7 版本签发 | 在近期计划中复用并下载清单 | `GET /api/release/{id}` | `app/modules/m7_release/service.py` | `tests/test_release.py` |
+| M8 迟到续批 | 对照原批与迟到修订分档并留证 | `POST /api/continuation` | `app/modules/m8_continuation/service.py` | `tests/test_continuation.py` |
 
 ## 陷阱登记
 
@@ -33,3 +34,14 @@
 ## 已知边界
 
 清单约定按日分区、拼接型节点、离线镜像演练。读源快照与分区日的证据随签发清单输出。
+
+## 迟到续批（M8）交接约定
+
+凌晨迟到修订到达、下游已领走上一批时，续批只在原批之上续开一层，原批记录只读保留、没有删除入口。
+
+- 三档处置：`可继续使用`（现行指针已与修订一致，下游补数不中断）、`需要重做`（依赖新口径，按目标指针重放）、`证据不足`（previous 对不上或上游缺快照，阻断且不进续批）。
+- 留证独立：重复行进入`重复留证`，冲突与无效行进入`隔离留证`，均不进入任何处置档，源行号随证保留。
+- 失败保留旧版：迟到修订解析或复算失败发生在落库之前，原批字节与旧版指针不变；写入演练仍以原批快照做回滚摘要。
+- 重试幂等：续批编号由`原批编号 + 修订原始字节`派生，同一份修订重试收敛到同一份续批，不新增第二份。
+- 单一目标行数：`single_target_rows` 兜底校验同一分区不得出现两个互相矛盾的补数目标行数，命中即整单拒绝。
+- 只有一个`迟到续批`工作页；续批不进版本签发的近期计划列表，不做权限和批量运营。

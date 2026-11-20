@@ -27,9 +27,15 @@ class Catalog:
             record = db.execute("SELECT document FROM plans WHERE id=?", (key,)).fetchone()[0]
             return json.loads(record), not op.rowcount
 
+    def save_continuation(self, key, result):
+        # 与普通批次同表同主键：相同修订重试只收敛到同一份续批，不会新增第二份。
+        return self.save(key, result)
+
     def latest(self):
         with closing(self.connection()) as db:
-            return [
-                json.loads(row[0])["批次"]
-                for row in db.execute("SELECT document FROM plans ORDER BY rowid DESC LIMIT 30")
-            ]
+            rows = db.execute(
+                "SELECT document FROM plans "
+                "WHERE json_extract(document, '$.续批') IS NULL "
+                "ORDER BY rowid DESC LIMIT 30"
+            ).fetchall()
+            return [json.loads(row[0])["批次"] for row in rows]
